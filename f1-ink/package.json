@@ -1,0 +1,26 @@
+{
+    "name": "f1-ink",
+    "version": "1.0.0",
+    "description": "F1 Terminal CLI in React Ink",
+    "type": "module",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "esbuild src/index.jsx --bundle --platform=node --packages=external --format=esm --target=node18 --outfile=dist/index.js",
+        "start": "npm run build && node dist/index.js"
+    },
+    "dependencies": {
+        "chalk": "^4.1.2",
+        "ink": "^4.4.1",
+        "ink-spinner": "^5.0.0",
+        "node-fetch": "^2.7.0",
+        "react": "^18.2.0"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.29.0",
+        "@babel/preset-env": "^7.29.0",
+        "@babel/preset-react": "^7.28.5",
+        "@babel/register": "^7.28.6",
+        "esbuild": "^0.27.3",
+        "esbuild-register": "^3.6.0"
+    }
+}
