@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 // src/index.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { render, Box, Text, useInput, Newline, Spacer } from "ink";
