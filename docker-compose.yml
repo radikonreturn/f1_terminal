@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  f1-terminal:
+    build: .
+    container_name: f1-terminal
+    # CRITICAL: These two options are required to keep the Node terminal active
+    # and allowing keyboard interactions in React Ink.
+    stdin_open: true
+    tty: true
