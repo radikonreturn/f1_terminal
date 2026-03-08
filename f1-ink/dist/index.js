@@ -134,18 +134,39 @@ var ScheduleView = () => {
   if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching schedule" });
   return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: `Race Schedule ${SEASON}` }), data.map((r) => {
     const flag = getFlag(r.Circuit.Location.country, RACE_FLAGS);
-    return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", key: r.round, marginBottom: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad(r.round, 2, true), "."), /* @__PURE__ */ React.createElement(Text, null, " ", flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, pad(r.raceName, 30)), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, pad(r.date, 12)), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, r.time?.replace("Z", "") || "TBD")), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 7 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, r.Circuit.circuitName, ", ", r.Circuit.Location.locality)));
+    let dateStr = r.date;
+    let timeStr = r.time ? r.time.replace("Z", "") : "TBD";
+    if (r.time) {
+      const rDt = /* @__PURE__ */ new Date(`${r.date}T${r.time}`);
+      const gmt3 = new Date(rDt.getTime() + 3 * 3600 * 1e3);
+      dateStr = gmt3.toISOString().split("T")[0];
+      timeStr = gmt3.toISOString().split("T")[1].substring(0, 5);
+    }
+    return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", key: r.round, marginBottom: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad(r.round, 2, true), "."), /* @__PURE__ */ React.createElement(Text, null, " ", flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, pad(r.raceName, 30)), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, pad(dateStr, 12)), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, timeStr)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 7 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, r.Circuit.circuitName, ", ", r.Circuit.Location.locality)));
   }));
 };
 var LastRaceView = () => {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
-    apiFetch(`/current/last/results.json`).then((d) => setData(d.MRData.RaceTable.Races[0])).catch((e) => setErr(e.message));
+    const fetchLastRace = async () => {
+      try {
+        let res = await apiFetch(`/current/last/results.json`);
+        if (res.MRData.RaceTable.Races.length === 0) {
+          const currentSeason = parseInt(res.MRData.RaceTable.season, 10);
+          const prevSeason = currentSeason - 1;
+          res = await apiFetch(`/${prevSeason}/last/results.json`);
+        }
+        setData(res.MRData.RaceTable.Races[0]);
+      } catch (e) {
+        setErr(e.message);
+      }
+    };
+    fetchLastRace();
   }, []);
   if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
   if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching last race" });
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: "Last Race Results" }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "cyanBright" }, "Round ", data.round, ": ", data.raceName)), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("DRIVER", 22), " ", pad("TEAM", 25), " ", "TIME/STATUS")), data.Results.map((r) => {
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: "Last Race Results" }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "cyanBright" }, "Season ", data.season, " Round ", data.round, ": ", data.raceName)), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("DRIVER", 22), " ", pad("TEAM", 25), " ", "TIME/STATUS")), data.Results.map((r) => {
     const team = r.Constructor.name;
     const name = `${r.Driver.givenName[0]} ${r.Driver.familyName}`;
     const timeStr = r.Time ? r.Time.time : r.status;
@@ -162,9 +183,9 @@ var NextRaceView = () => {
       const now = /* @__PURE__ */ new Date();
       let nextRace = null;
       for (const r of races) {
-        const dateStr = r.date;
-        const timeStr = r.time || "00:00:00Z";
-        const rDt = /* @__PURE__ */ new Date(`${dateStr}T${timeStr}`);
+        const dateStr2 = r.date;
+        const timeStr2 = r.time || "00:00:00Z";
+        const rDt = /* @__PURE__ */ new Date(`${dateStr2}T${timeStr2}`);
         if (rDt > now) {
           nextRace = { ...r, rDt };
           break;
@@ -183,7 +204,71 @@ var NextRaceView = () => {
   const hours = Math.floor(diff / (1e3 * 60 * 60) % 24);
   const minutes = Math.floor(diff / 1e3 / 60 % 60);
   const flag = getFlag(data.Circuit.Location.country, RACE_FLAGS);
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: "Next Race" }), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", marginY: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, null, flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, data.raceName)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Location: ", data.Circuit.circuitName, ", ", data.Circuit.Location.locality)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, "Date:     ", data.date, " at ", data.time?.replace("Z", "") || "00:00:00")), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4, marginTop: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "Starts in: ", days, "d ", hours, "h ", minutes, "m"))));
+  const gmt3 = new Date(data.rDt.getTime() + 3 * 3600 * 1e3);
+  const dateStr = gmt3.toISOString().split("T")[0];
+  const timeStr = gmt3.toISOString().split("T")[1].substring(0, 5);
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: "Next Race" }), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", marginY: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, null, flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, data.raceName)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Location: ", data.Circuit.circuitName, ", ", data.Circuit.Location.locality)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, "Date:     ", dateStr, " at ", timeStr)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4, marginTop: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "Starts in: ", days, "d ", hours, "h ", minutes, "m"))));
+};
+var FALLBACK_TEAMS = {
+  "albon": "Williams",
+  "alonso": "Aston Martin",
+  "antonelli": "Mercedes",
+  "bearman": "Haas",
+  "bortoleto": "Sauber",
+  "bottas": "Sauber",
+  "colapinto": "Williams",
+  "gasly": "Alpine",
+  "hadjar": "RB",
+  "hamilton": "Ferrari",
+  "hulkenberg": "Sauber",
+  "lawson": "RB",
+  "leclerc": "Ferrari",
+  "lindblad": "RB",
+  "norris": "McLaren",
+  "ocon": "Haas",
+  "piastri": "McLaren",
+  "perez": "Red Bull",
+  "russell": "Mercedes",
+  "sainz": "Williams",
+  "stroll": "Aston Martin",
+  "max_verstappen": "Red Bull",
+  "tsunoda": "RB",
+  "doohan": "Alpine"
+};
+var DriversView = () => {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    const fetchDrivers = async () => {
+      try {
+        const [dRes, sRes] = await Promise.all([
+          apiFetch(`/${SEASON}/drivers.json`),
+          apiFetch(`/${SEASON}/driverStandings.json`).catch(() => null)
+        ]);
+        const tMap = {};
+        if (sRes?.MRData?.StandingsTable?.StandingsLists?.length > 0) {
+          sRes.MRData.StandingsTable.StandingsLists[0].DriverStandings.forEach((d) => {
+            tMap[d.Driver.driverId] = d.Constructors[0]?.name || "Unknown";
+          });
+        }
+        const drivers = dRes.MRData.DriverTable.Drivers.map((d) => ({
+          ...d,
+          team: tMap[d.driverId] || FALLBACK_TEAMS[d.driverId] || "Unknown"
+        }));
+        setData(drivers);
+      } catch (e) {
+        setErr(e.message);
+      }
+    };
+    fetchDrivers();
+  }, []);
+  if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
+  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching drivers" });
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: `Drivers ${SEASON}` }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("NO", 4), " ", pad("DRIVER", 23), " ", pad("TEAM", 20), " ", pad("NAT", 6), " ", "CODE")), data.map((d) => {
+    const name = `${d.givenName} ${d.familyName}`;
+    const flag = getFlag(d.nationality, NAT_FLAGS);
+    return /* @__PURE__ */ React.createElement(Box, { key: d.driverId }, /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(d.permanentNumber || "-", 3, true), " "), /* @__PURE__ */ React.createElement(Text, { color: "white" }, pad(name, 23)), /* @__PURE__ */ React.createElement(Text, { color: teamColor(d.team) }, pad(d.team, 20)), /* @__PURE__ */ React.createElement(Text, null, pad(flag, 6)), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, d.code || "N/A")));
+  }));
 };
 var PilotView = ({ pilotCode }) => {
   const [data, setData] = useState(null);
@@ -276,6 +361,7 @@ var PilotView = ({ pilotCode }) => {
 };
 var VIEWS = {
   standings: /* @__PURE__ */ React.createElement(StandingsView, null),
+  drivers: /* @__PURE__ */ React.createElement(DriversView, null),
   constructors: /* @__PURE__ */ React.createElement(ConstructorsView, null),
   schedule: /* @__PURE__ */ React.createElement(ScheduleView, null),
   next: /* @__PURE__ */ React.createElement(NextRaceView, null),
@@ -283,10 +369,11 @@ var VIEWS = {
 };
 var MENU_ITEMS = [
   { key: "1", name: "Driver Standings", view: "standings" },
-  { key: "2", name: "Constructor Standings", view: "constructors" },
-  { key: "3", name: "Race Schedule", view: "schedule" },
-  { key: "4", name: "Next Race", view: "next" },
-  { key: "5", name: "Last Race Results", view: "last" },
+  { key: "2", name: "Drivers / Pilots List", view: "drivers" },
+  { key: "3", name: "Constructor Standings", view: "constructors" },
+  { key: "4", name: "Race Schedule", view: "schedule" },
+  { key: "5", name: "Next Race", view: "next" },
+  { key: "6", name: "Last Race Results", view: "last" },
   { key: "q", name: "Quit", view: "quit" }
 ];
 var App = ({ initialView, pilotCode }) => {
@@ -319,7 +406,7 @@ if (!args[0]) {
   render(/* @__PURE__ */ React.createElement(App, null));
 } else {
   const cmd = args[0].toLowerCase();
-  if (["standings", "constructors", "schedule", "next", "last", "pilot"].includes(cmd)) {
+  if (["standings", "drivers", "constructors", "schedule", "next", "last", "pilot"].includes(cmd)) {
     render(/* @__PURE__ */ React.createElement(App, { initialView: cmd, pilotCode: args[1] }));
   } else {
     console.log(chalk.red.bold("\nF1 Terminal CLI - Error"));
@@ -327,6 +414,7 @@ if (!args[0]) {
 `);
     console.log(chalk.bold("Available commands:"));
     console.log(`  ${chalk.green("standings")}    - Show driver standings`);
+    console.log(`  ${chalk.green("drivers")}      - Show all drivers/pilots grid`);
     console.log(`  ${chalk.green("constructors")} - Show constructor standings`);
     console.log(`  ${chalk.green("schedule")}     - Show race schedule`);
     console.log(`  ${chalk.green("next")}         - Show next upcoming race and countdown`);

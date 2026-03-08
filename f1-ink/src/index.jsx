@@ -124,13 +124,15 @@ const StandingsView = () => {
             {data.map(d => {
                 const team = d.Constructors[0]?.name || 'Unknown';
                 const name = `${d.Driver.givenName[0]} ${d.Driver.familyName}`;
+                const pos = d.position || d.positionText || '-';
+                const pts = d.points || '0';
                 return (
                     <Box key={d.Driver.driverId}>
-                        <Box width={4}><Text bold>{pad(d.position, 2, true)} </Text></Box>
-                        <Box width={3}><Medal pos={d.position} /></Box>
+                        <Box width={4}><Text bold>{pad(pos, 2, true)} </Text></Box>
+                        <Box width={3}><Medal pos={pos} /></Box>
                         <Box width={22}><Text color="white">{name}</Text></Box>
                         <Box width={25}><Text color={teamColor(team)}>{team}</Text></Box>
-                        <Text color="greenBright" bold>{pad(d.points, 4, true)}</Text>
+                        <Text color="greenBright" bold>{pad(pts, 4, true)}</Text>
                     </Box>
                 );
             })}
@@ -162,14 +164,17 @@ const ConstructorsView = () => {
             {data.map(d => {
                 const team = d.Constructor.name;
                 const flag = getFlag(d.Constructor.nationality, NAT_FLAGS);
+                const pos = d.position || d.positionText || '-';
+                const pts = d.points || '0';
+                const wins = d.wins || '0';
                 return (
                     <Box key={d.Constructor.constructorId}>
-                        <Box width={4}><Text bold>{pad(d.position, 2, true)} </Text></Box>
-                        <Box width={3}><Medal pos={d.position} /></Box>
+                        <Box width={4}><Text bold>{pad(pos, 2, true)} </Text></Box>
+                        <Box width={3}><Medal pos={pos} /></Box>
                         <Box width={25}><Text color={teamColor(team)}>{team}</Text></Box>
                         <Box width={6}><Text>{flag}</Text></Box>
-                        <Box width={6}><Text>{pad(d.wins, 4, true)}</Text></Box>
-                        <Text color="greenBright" bold>{pad(d.points, 4, true)}</Text>
+                        <Box width={6}><Text>{pad(wins, 4, true)}</Text></Box>
+                        <Text color="greenBright" bold>{pad(pts, 4, true)}</Text>
                     </Box>
                 );
             })}
@@ -195,14 +200,24 @@ const ScheduleView = () => {
             <Header title={`Race Schedule ${SEASON}`} />
             {data.map(r => {
                 const flag = getFlag(r.Circuit.Location.country, RACE_FLAGS);
+                let dateStr = r.date;
+                let timeStr = r.time ? r.time.replace('Z', '') : 'TBD';
+
+                if (r.time) {
+                    const rDt = new Date(`${r.date}T${r.time}`);
+                    const gmt3 = new Date(rDt.getTime() + 3 * 3600 * 1000);
+                    dateStr = gmt3.toISOString().split('T')[0];
+                    timeStr = gmt3.toISOString().split('T')[1].substring(0, 5);
+                }
+
                 return (
                     <Box flexDirection="column" key={r.round} marginBottom={1}>
                         <Box>
                             <Text dimColor>{pad(r.round, 2, true)}.</Text>
                             <Text> {flag} </Text>
                             <Text color="whiteBright" bold>{pad(r.raceName, 30)}</Text>
-                            <Text color="cyan">{pad(r.date, 12)}</Text>
-                            <Text dimColor>{r.time?.replace('Z', '') || 'TBD'}</Text>
+                            <Text color="cyan">{pad(dateStr, 12)}</Text>
+                            <Text dimColor>{timeStr}</Text>
                         </Box>
                         <Box paddingLeft={7}>
                             <Text dimColor>{r.Circuit.circuitName}, {r.Circuit.Location.locality}</Text>
@@ -219,9 +234,20 @@ const LastRaceView = () => {
     const [err, setErr] = useState(null);
 
     useEffect(() => {
-        apiFetch(`/current/last/results.json`)
-            .then(d => setData(d.MRData.RaceTable.Races[0]))
-            .catch(e => setErr(e.message));
+        const fetchLastRace = async () => {
+            try {
+                let res = await apiFetch(`/current/last/results.json`);
+                if (res.MRData.RaceTable.Races.length === 0) {
+                    const currentSeason = parseInt(res.MRData.RaceTable.season, 10);
+                    const prevSeason = currentSeason - 1;
+                    res = await apiFetch(`/${prevSeason}/last/results.json`);
+                }
+                setData(res.MRData.RaceTable.Races[0]);
+            } catch (e) {
+                setErr(e.message);
+            }
+        };
+        fetchLastRace();
     }, []);
 
     if (err) return <Err msg={err} />;
@@ -231,7 +257,7 @@ const LastRaceView = () => {
         <Box flexDirection="column">
             <Header title="Last Race Results" />
             <Box marginBottom={1}>
-                <Text color="cyanBright">Round {data.round}: {data.raceName}</Text>
+                <Text color="cyanBright">Season {data.season} Round {data.round}: {data.raceName}</Text>
             </Box>
             <Box marginBottom={1}>
                 <Text dimColor>
@@ -300,6 +326,10 @@ const NextRaceView = () => {
 
     const flag = getFlag(data.Circuit.Location.country, RACE_FLAGS);
 
+    const gmt3 = new Date(data.rDt.getTime() + 3 * 3600 * 1000);
+    const dateStr = gmt3.toISOString().split('T')[0];
+    const timeStr = gmt3.toISOString().split('T')[1].substring(0, 5);
+
     return (
         <Box flexDirection="column" paddingX={1}>
             <Header title="Next Race" />
@@ -312,12 +342,84 @@ const NextRaceView = () => {
                     <Text dimColor>Location: {data.Circuit.circuitName}, {data.Circuit.Location.locality}</Text>
                 </Box>
                 <Box paddingLeft={4}>
-                    <Text color="cyan">Date:     {data.date} at {data.time?.replace('Z', '') || '00:00:00'}</Text>
+                    <Text color="cyan">Date:     {dateStr} at {timeStr}</Text>
                 </Box>
                 <Box paddingLeft={4} marginTop={1}>
                     <Text color="yellowBright" bold>Starts in: {days}d {hours}h {minutes}m</Text>
                 </Box>
             </Box>
+        </Box>
+    );
+};
+
+const FALLBACK_TEAMS = {
+    "albon": "Williams", "alonso": "Aston Martin", "antonelli": "Mercedes",
+    "bearman": "Haas", "bortoleto": "Sauber", "bottas": "Sauber",
+    "colapinto": "Williams", "gasly": "Alpine", "hadjar": "RB",
+    "hamilton": "Ferrari", "hulkenberg": "Sauber", "lawson": "RB",
+    "leclerc": "Ferrari", "lindblad": "RB", "norris": "McLaren", "ocon": "Haas",
+    "piastri": "McLaren", "perez": "Red Bull", "russell": "Mercedes",
+    "sainz": "Williams", "stroll": "Aston Martin", "max_verstappen": "Red Bull",
+    "tsunoda": "RB", "doohan": "Alpine"
+};
+
+const DriversView = () => {
+    const [data, setData] = useState(null);
+    const [err, setErr] = useState(null);
+
+    useEffect(() => {
+        const fetchDrivers = async () => {
+            try {
+                const [dRes, sRes] = await Promise.all([
+                    apiFetch(`/${SEASON}/drivers.json`),
+                    apiFetch(`/${SEASON}/driverStandings.json`).catch(() => null)
+                ]);
+
+                const tMap = {};
+                if (sRes?.MRData?.StandingsTable?.StandingsLists?.length > 0) {
+                    sRes.MRData.StandingsTable.StandingsLists[0].DriverStandings.forEach(d => {
+                        tMap[d.Driver.driverId] = d.Constructors[0]?.name || 'Unknown';
+                    });
+                }
+
+                const drivers = dRes.MRData.DriverTable.Drivers.map(d => ({
+                    ...d,
+                    team: tMap[d.driverId] || FALLBACK_TEAMS[d.driverId] || 'Unknown'
+                }));
+                setData(drivers);
+            } catch (e) {
+                setErr(e.message);
+            }
+        };
+        fetchDrivers();
+    }, []);
+
+    if (err) return <Err msg={err} />;
+    if (!data) return <Loading label="Fetching drivers" />;
+
+    return (
+        <Box flexDirection="column" paddingX={1}>
+            <Header title={`Drivers ${SEASON}`} />
+            <Box marginBottom={1}>
+                <Text dimColor>
+                    {pad('NO', 4)} {pad('DRIVER', 23)} {pad('TEAM', 20)} {pad('NAT', 6)} {'CODE'}
+                </Text>
+            </Box>
+            {data.map(d => {
+                const name = `${d.givenName} ${d.familyName}`;
+                const flag = getFlag(d.nationality, NAT_FLAGS);
+                return (
+                    <Box key={d.driverId}>
+                        <Text>
+                            <Text bold>{pad(d.permanentNumber || '-', 3, true)} </Text>
+                            <Text color="white">{pad(name, 23)}</Text>
+                            <Text color={teamColor(d.team)}>{pad(d.team, 20)}</Text>
+                            <Text>{pad(flag, 6)}</Text>
+                            <Text color="cyan">{d.code || 'N/A'}</Text>
+                        </Text>
+                    </Box>
+                );
+            })}
         </Box>
     );
 };
@@ -422,6 +524,7 @@ const PilotView = ({ pilotCode }) => {
 // --- INTERACTIVE MENU ---
 const VIEWS = {
     standings: <StandingsView />,
+    drivers: <DriversView />,
     constructors: <ConstructorsView />,
     schedule: <ScheduleView />,
     next: <NextRaceView />,
@@ -430,10 +533,11 @@ const VIEWS = {
 
 const MENU_ITEMS = [
     { key: '1', name: 'Driver Standings', view: 'standings' },
-    { key: '2', name: 'Constructor Standings', view: 'constructors' },
-    { key: '3', name: 'Race Schedule', view: 'schedule' },
-    { key: '4', name: 'Next Race', view: 'next' },
-    { key: '5', name: 'Last Race Results', view: 'last' },
+    { key: '2', name: 'Drivers / Pilots List', view: 'drivers' },
+    { key: '3', name: 'Constructor Standings', view: 'constructors' },
+    { key: '4', name: 'Race Schedule', view: 'schedule' },
+    { key: '5', name: 'Next Race', view: 'next' },
+    { key: '6', name: 'Last Race Results', view: 'last' },
     { key: 'q', name: 'Quit', view: 'quit' }
 ];
 
@@ -523,13 +627,14 @@ if (!args[0]) {
     render(<App />);
 } else {
     const cmd = args[0].toLowerCase();
-    if (['standings', 'constructors', 'schedule', 'next', 'last', 'pilot'].includes(cmd)) {
+    if (['standings', 'drivers', 'constructors', 'schedule', 'next', 'last', 'pilot'].includes(cmd)) {
         render(<App initialView={cmd} pilotCode={args[1]} />);
     } else {
         console.log(chalk.red.bold('\nF1 Terminal CLI - Error'));
         console.log(`Unknown command: ${cmd}\n`);
         console.log(chalk.bold('Available commands:'));
         console.log(`  ${chalk.green('standings')}    - Show driver standings`);
+        console.log(`  ${chalk.green('drivers')}      - Show all drivers/pilots grid`);
         console.log(`  ${chalk.green('constructors')} - Show constructor standings`);
         console.log(`  ${chalk.green('schedule')}     - Show race schedule`);
         console.log(`  ${chalk.green('next')}         - Show next upcoming race and countdown`);

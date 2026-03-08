@@ -1,5 +1,27 @@
 # F1 Terminal Dashboard 🏎️🏁
 
+> **English summary:** A dual-implementation Formula 1 CLI that fetches live standings, schedule, race results and driver profiles from the [Jolpi API](https://jolpi.ca) and renders them in your terminal with colors, flags and countdown timers.
+>
+> Two versions:
+> - `f1.py` — Pure Python, no dependencies, interactive REPL + direct CLI
+> - `f1-ink/` — React Ink (Node.js) TUI with menu navigation
+>
+> **Commands:** `standings` · `constructors` · `schedule` · `next` · `last` · `drivers` · `pilot <CODE>` · `help`
+>
+> ```bash
+> # Python
+> python f1.py                  # interactive REPL
+> python f1.py standings        # driver standings
+> python f1.py drivers          # full driver grid
+> python f1.py pilot VER        # Verstappen's career profile
+>
+> # Node
+> cd f1-ink && npm install && npm start
+> ```
+
+---
+
+
 Sıradan terminalinizi gerçek bir pit duvarına dönüştürün! Formula 1 verilerini (yarış takvimi, puan durumları, güncel sezon) terminalden şık ve hızlı bir şekilde almanızı sağlayan iki farklı CLI uygulaması: **f1.py** (Saf Python) ve **f1-ink** (React Ink).
 
 Veri kaynağı olarak güvenilir bir Ergast kalıtımı olan [Jolpi API](https://test.jolpi.ca/ergast/f1) (Ergast v1.0.0 uyumlu aynası) kullanılmaktadır.
@@ -56,3 +78,5 @@ Sadece spesifik bir tabloyu görmek istiyorsanız aynı Python'daki gibi argüma
 * **`f1-ink` ESBuild Entegrasyonu:** React Ink altyapısı gereği JSX içerir, ancak Node bunu saf olarak anlamaz. `package.json` içerisinde ESBuild ile (ve `--packages=external` ile node_modules dahil edilmeyerek hızlıca) anında ESM JavaScript paketi çıkarılıp sunulur.
 * **Offline Fallbacks:** İnternetiniz gider veya API DNS olarak kısıtlanmışsa (`getaddrinfo` hatası) terminalin çirkin stack trace'lerle boğulması engellenmiş, kullanıcıya net bir DNS sorunu mesajı verilmektedir.
 * **Geri Sayım Modülü (`next` komutu):** 2026 veya geçerli sezon içerisindeki "sıradaki" yarışı anlık `datetime` parse işlemiyle bularak dakika/saat bazlı Countdown yeteneği barındırır.
+* **API Fallback Güvenliği:** API'den gelen verilerde `'position'` alanı boş olan sürücüler (henüz puanı olmayan pilotlar) `positionText` ve `-` değerlerine güvenli bir şekilde fallback (yedekleme) yapar.
+* **Bağımlılıklar (Node.js):** `f1-ink` versiyonu API istekleri için `node-fetch` paketi kullanır, kurulum adımında projedeki Node modüllerini (`npm install`) mutlaka yükleyin.

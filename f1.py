@@ -5,7 +5,7 @@ import json
 import sys
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Force UTF-8 encoding for Windows console
 if sys.stdout.encoding != 'utf-8':
@@ -114,6 +114,8 @@ def api_fetch(endpoint, label="Fetching data"):
         err = None
         done = False
         
+        # NOTE: SSL verification is disabled for Jolpi API compatibility on some
+        # systems. The API is a public read-only endpoint with no credentials involved.
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -122,7 +124,10 @@ def api_fetch(endpoint, label="Fetching data"):
             nonlocal res, err, done
             try:
                 with urlopen(req, timeout=TIMEOUT, context=ctx) as response:
-                    res = json.loads(response.read().decode('utf-8'))
+                    if response.status != 200:
+                        err = Exception("HTTP {}: {}".format(response.status, response.reason))
+                    else:
+                        res = json.loads(response.read().decode('utf-8'))
             except Exception as e:
                 err = e
             finally:
@@ -178,8 +183,8 @@ def cmd_standings():
         )))
         
         for d in table:
-            pos = d["position"]
-            pts = d["points"]
+            pos = d.get("position", d.get("positionText", "-"))
+            pts = d.get("points", "0")
             driver = d["Driver"]
             team = d["Constructors"][0] if d["Constructors"] else {"name": "Unknown"}
             
@@ -217,9 +222,9 @@ def cmd_constructors():
         )))
         
         for c_val in table:
-            pos = c_val["position"]
-            pts = c_val["points"]
-            wins = c_val["wins"]
+            pos = c_val.get("position", c_val.get("positionText", "-"))
+            pts = c_val.get("points", "0")
+            wins = c_val.get("wins", "0")
             team = c_val["Constructor"]
             
             team_colored = c(team_color(team["name"]), team["name"])
@@ -255,7 +260,17 @@ def cmd_schedule():
             circuit = r["Circuit"]["circuitName"]
             loc = r["Circuit"]["Location"]
             date = r["date"]
-            time_str = r.get("time", "TBD").replace("Z", "")
+            time_str = r.get("time", "TBD")
+            
+            if time_str != "TBD":
+                time_str_clean = time_str.replace("Z", "")
+                dt_str = "{}T{}Z".format(date, time_str_clean)
+                r_dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                local_dt = r_dt.astimezone(timezone(timedelta(hours=3)))
+                date = local_dt.strftime("%Y-%m-%d")
+                time_str = local_dt.strftime("%H:%M (UTC+3)")
+            else:
+                time_str = time_str.replace("Z", "")
             
             flag = get_race_flag(loc["country"])
             
@@ -274,12 +289,22 @@ def cmd_schedule():
 def cmd_last():
     _print_header("Last Race Results")
     data = api_fetch("/current/last/results.json", "Fetching last race")
+    
+    # If the current season hasn't started, fetch the last race of the previous season
+    try:
+        if len(data["MRData"]["RaceTable"]["Races"]) == 0:
+            current_season = int(data["MRData"]["RaceTable"]["season"])
+            prev_season = current_season - 1
+            data = api_fetch(f"/{prev_season}/last/results.json", f"Fetching last race of {prev_season}")
+    except KeyError:
+        pass
+
     try:
         race_info = data["MRData"]["RaceTable"]["Races"][0]
         race_name = race_info["raceName"]
         results = race_info["Results"]
         
-        print(c(C.CYAN, "Round {}: {}\n".format(race_info["round"], race_name)))
+        print(c(C.CYAN, "Season {} Round {}: {}\n".format(race_info["season"], race_info["round"], race_name)))
         
         print(c(C.DIM, "POS {pos} DRIVER               TEAM                 TIME/STATUS").format(
             pos=pad("", 3)
@@ -338,15 +363,74 @@ def cmd_next():
             hours, remainder = divmod(diff.seconds, 3600)
             minutes, _ = divmod(remainder, 60)
             
+            local_dt = race_dt.astimezone(timezone(timedelta(hours=3)))
+
             print("{} {}".format(flag, c(C.BOLD + C.WHITE, name)))
             print(c(C.DIM, "Location: {}, {}".format(circuit, loc['locality'])))
-            print(c(C.CYAN, "Date:     {} at {}".format(next_race["date"], next_race.get("time", "00:00:00Z").replace('Z', ''))))
+            print(c(C.CYAN, "Date:     {} at {} UTC+3".format(local_dt.strftime("%Y-%m-%d"), local_dt.strftime("%H:%M"))))
             print(c(C.YELLOW + C.BOLD, "Starts in: {}d {}h {}m\n".format(days, hours, minutes)))
         else:
             print("No upcoming races found for this season.")
             
     except Exception as e:
         print("Error finding next race:", e)
+
+def cmd_drivers():
+    _print_header("Drivers {}".format(SEASON))
+    data = api_fetch("/{}/drivers.json".format(SEASON), "Fetching drivers")
+    s_data = api_fetch("/{}/driverStandings.json".format(SEASON), "Fetching teams")
+    
+    FALLBACK_TEAMS = {
+        "albon": "Williams", "alonso": "Aston Martin", "antonelli": "Mercedes", 
+        "bearman": "Haas", "bortoleto": "Sauber", "bottas": "Sauber", 
+        "colapinto": "Williams", "gasly": "Alpine", "hadjar": "RB", 
+        "hamilton": "Ferrari", "hulkenberg": "Sauber", "lawson": "RB", 
+        "leclerc": "Ferrari", "lindblad": "RB", "norris": "McLaren", "ocon": "Haas", 
+        "piastri": "McLaren", "perez": "Red Bull", "russell": "Mercedes", 
+        "sainz": "Williams", "stroll": "Aston Martin", "max_verstappen": "Red Bull", 
+        "tsunoda": "RB", "doohan": "Alpine"
+    }
+    
+    team_map = {}
+    try:
+        lists = s_data["MRData"]["StandingsTable"]["StandingsLists"]
+        if lists:
+            for d in lists[0]["DriverStandings"]:
+                team_map[d["Driver"]["driverId"]] = d["Constructors"][0]["name"]
+    except (KeyError, IndexError, TypeError):
+        pass
+
+    try:
+        drivers = data["MRData"]["DriverTable"]["Drivers"]
+        
+        print((c(C.DIM, "NO {no} DRIVER {driver} TEAM {team_pad} NAT {nat} CODE").format(
+            no=pad("", 1),
+            driver=pad("", 16),
+            team_pad=pad("", 15),
+            nat=pad("", 3)
+        )))
+        
+        for d in drivers:
+            no = d.get("permanentNumber", "N/A")
+            name = "{} {}".format(d["givenName"], d["familyName"])
+            nat = d["nationality"]
+            flag = get_flag(nat)
+            code = d.get("code", "N/A")
+            d_id = d["driverId"]
+            
+            team_name = team_map.get(d_id, FALLBACK_TEAMS.get(d_id, "Unknown"))
+            team_colored = c(team_color(team_name), team_name)
+            
+            print("{no_pad} {name_pad} {team_str} {flag_pad} {code_pad}".format(
+                no_pad=c(C.BOLD, pad(no, 3, right=True)),
+                name_pad=c(C.WHITE, pad(name, 23)),
+                team_str=pad(team_colored, 28),
+                flag_pad=pad(flag, 4),
+                code_pad=c(C.CYAN, pad(code, 4))
+            ))
+            
+    except Exception as e:
+        print("Error parsing drivers:", e)
 
 def cmd_pilot(code=None):
     if not code:
@@ -372,7 +456,7 @@ def cmd_pilot(code=None):
                     print(c(C.RED, f"Driver '{code}' not found in active grid. Use full driverId for historical pilots."))
                     return
                 driver = single_data["MRData"]["DriverTable"]["Drivers"][0]
-            except:
+            except (KeyError, IndexError, Exception):
                 print(c(C.RED, f"Driver '{code}' not found."))
                 return
         else:
@@ -417,6 +501,7 @@ def cmd_help():
     _print_header("F1 Terminal CLI - Help")
     print(c(C.BOLD, "Available commands:"))
     print("  {} - Show driver standings".format(c(C.GREEN, "standings")))
+    print("  {}   - Show all drivers/pilots grid".format(c(C.GREEN, "drivers")))
     print("  {} - Show constructor standings".format(c(C.GREEN, "constructors")))
     print("  {} - Show race schedule".format(c(C.GREEN, "schedule")))
     print("  {} - Show next upcoming race and countdown".format(c(C.GREEN, "next")))
@@ -428,6 +513,7 @@ def cmd_help():
 def dispatch(cmd_name, args):
     table = {
         "standings": cmd_standings,
+        "drivers": cmd_drivers,
         "constructors": cmd_constructors,
         "schedule": cmd_schedule,
         "next": cmd_next,
@@ -440,12 +526,9 @@ def dispatch(cmd_name, args):
     
     fn = table.get(cmd_name.lower())
     if fn:
-        if args and fn not in [cmd_last, cmd_schedule, cmd_standings, cmd_constructors, cmd_help, cmd_next]:
-            try:
-                fn(*args)
-            except TypeError:
-                print("Too many arguments for '{}'".format(cmd_name))
-        else:
+        try:
+            fn(*args) if args else fn()
+        except TypeError:
             fn()
     else:
         if cmd_name:
