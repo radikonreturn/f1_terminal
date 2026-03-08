@@ -44,16 +44,25 @@ A fully interactive, keyboard-driven dashboard built with [React Ink](https://gi
 * **Rich Visuals**: Team-specific hex colors and Unicode country/race flags.
 
 ### Installation
-Make sure you have Node.js installed, then run:
+The TUI is published on NPM and can be run immediately without installation:
+```bash
+npx f1-terminal-cli
+```
+
+Or install it globally:
+```bash
+npm install -g f1-terminal-cli
+```
+```bash
+f1-terminal-cli
+```
+
+#### Running from Source
+If you want to build and run it locally from source:
 ```bash
 cd f1-ink
 npm install
 npm run build
-```
-
-### Usage
-Start the dashboard interactive session:
-```bash
 npm run run
 ```
 

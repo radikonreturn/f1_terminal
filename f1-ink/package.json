@@ -1,11 +1,11 @@
 {
-    "name": "@radikonreturn/f1-terminal",
+    "name": "f1-terminal-cli",
     "version": "1.0.0",
     "description": "Real-time F1 standings, schedule and race results in your terminal",
     "type": "module",
     "main": "dist/index.js",
     "bin": {
-        "f1-terminal": "./dist/index.js"
+        "f1-terminal-cli": "dist/index.js"
     },
     "files": [
         "dist/"
