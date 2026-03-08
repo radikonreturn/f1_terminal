@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import React, { useState, useEffect, useRef } from 'react';
 import { render, Box, Text, useInput, Newline, Spacer } from 'ink';
 import Spinner from 'ink-spinner';
