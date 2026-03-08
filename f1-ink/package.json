@@ -1,5 +1,5 @@
 {
-    "name": "f1-terminal",
+    "name": "@radikonreturn/f1-terminal",
     "version": "1.0.0",
     "description": "Real-time F1 standings, schedule and race results in your terminal",
     "type": "module",
