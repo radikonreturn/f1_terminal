@@ -1,91 +1,83 @@
-# F1 Terminal Dashboard 🏎️🏁
+# F1 Terminal 🏎️
 
-Turn your standard terminal into a real-time pit wall! A dual-implementation Formula 1 CLI that fetches live standings, schedules, recent race results, and driver profiles from the [Jolpi API](https://jolpi.ca) (Ergast v1.0.0 compatible mirror) and renders them in your terminal with rich colors, flags, and countdown timers.
+Welcome to the F1 Terminal! This project provides a real-time pit wall experience right in your terminal. It fetches live driver and constructor standings, race schedules, and pilot statistics using the [Jolpi API](https://jolpi.ca/) (an Ergast v1.0.0 compatible mirror).
 
-Built in two flavors:
-- **🐍 `f1.py`** — Pure Python 3, zero third-party dependencies, features an interactive REPL or direct CLI execution.
-- **⚛️ `f1-ink/`** — React Ink (Node.js) TUI providing a dynamic, full-color, interactive menu navigation experience.
-
----
-
-## 🏎️ Commands & Features
-
-Both implementations support the same core dataset and direct commands:
-
-- `standings` — Shows the current Driver Championship standings.
-- `constructors` — Shows the current Constructor Championship standings.
-- `drivers` — Displays the active grid of drivers/pilots, including permanent numbers and 3-letter codes.
-- `schedule` — Displays the full, timezone-adjusted race calendar for the current season.
-- `next` — Shows the details of the next upcoming race along with a live **countdown timer**.
-- `last` — Displays the detailed classification results and lap times/status of the last completed race.
-- `pilot <CODE>` — Fetches a specific driver's profile and historical stats (e.g., `pilot VER` or `pilot HAM`).
-- `help` — Lists all available commands.
+This repository contains **two distinct implementations**:
+1. **Python CLI (`f1.py`)**: A lightweight, dependency-free interactive command-line interface.
+2. **React Ink TUI (`f1-ink/`)**: A rich, interactive Terminal User Interface built with React Ink and Node.js.
 
 ---
 
-## 🐍 1. Python Version (`f1.py`)
+## 🐍 1. Python CLI (`f1.py`)
 
-No dependencies, no downloads, fast and lightweight! Uses only the Python standard library. It is designed to be completely resilient against crashes (e.g., missing API fields or offline DNS errors).
+A pure Python 3 implementation requiring zero third-party packages. It handles network failures and API irregularities gracefully.
+
+### Features
+* **Interactive REPL Mode**: Type commands endlessly without restarting the script.
+* **Direct Execution**: Run one-off commands (e.g., `python f1.py standings`).
+* **Zero Dependencies**: Uses only the Python standard library (`json`, `urllib`).
+* **Offline Resilience**: Handles DNS and socket timeouts with user-friendly errors.
 
 ### Usage
-
-**Interactive REPL Mode:**
-Open your terminal and simply run:
+Run the interactive console:
 ```bash
 python f1.py
 ```
-This drops you into an interactive `f1>` console where you can type commands endlessly.
 
-**Direct Command Mode:**
-If you want to view a single table quickly and exit:
+Or run a command directly:
 ```bash
 python f1.py standings
+python f1.py constructors
 python f1.py next
-python f1.py pilot ALO
 ```
-
-*(Note: If you're on Windows, UTF-8 emoji and ANSI color support issues are natively handled inside the script using `sys.reconfigure` and `kernel32` patches).*
 
 ---
 
-## ⚛️ 2. React Ink Version (`f1-ink`)
+## ⚛️ 2. React Ink TUI (`f1-ink/`)
 
-A full-color, dynamic Terminal User Interface (TUI) built using Node.js and React Ink. It compiles down to a single bundle via ESBuild for extremely fast execution.
+A fully interactive, keyboard-driven dashboard built with [React Ink](https://github.com/vadimdemedes/ink). It features a polished split-pane layout, real-time countdowns, caching, and pilot search capabilities.
 
-### Installation & Usage
+### Features
+* **Interactive Navigation**: Use arrow keys (`↑`, `↓`) and `Enter` to browse views.
+* **Intelligent Caching**: Minimizes unnecessary network calls (5-minute TTL for standings, 30-sec for race countdowns).
+* **Pilot Search**: Live search for your favorite pilots using 3-letter codes (e.g., `VER`, `HAM`) via `ink-text-input`.
+* **Rich Visuals**: Team-specific hex colors and Unicode country/race flags.
 
-Ensure you have Node.js and npm installed on your system.
-
+### Installation
+Make sure you have Node.js installed, then run:
 ```bash
 cd f1-ink
 npm install
 npm run build
 ```
 
-**Interactive Menu (TUI):**
-Start the visual dashboard:
+### Usage
+Start the dashboard interactive session:
 ```bash
-npm start
-```
-Use the keyboard keys (`1`, `2`, `3`, `4`, `5`, `6`) to navigate through the menus. Press `[M]` or `[B]` to return to the main menu and `[Q]` to quit.
-
-**Direct Command Mode:**
-You can also pass arguments directly to the Node script:
-```bash
-npm start standings
-npm start pilot LEC
+npm run run
 ```
 
 ---
 
-## 🛠️ Architecture & Resilience
+## 🏁 Available Commands & Views
 
-* **Zero-Dependency Python Threads:** The Python version uses standard library `urllib` wrapped within a `threading.Thread` to display an animated spinner while fetching data. It handles 10-second timeouts gracefully.
-* **ESBuild Integration:** React Ink utilizes JSX. To avoid requiring `babel-node` in production, the `package.json` uses ESBuild to bundle the source code directly into an ESM JavaScript file (`dist/index.js`) on the fly.
-* **Offline & DNS Fallbacks:** If your internet disconnects or DNS resolution fails (`getaddrinfo` errors), the terminal catches it and displays a readable error message instead of an ugly stack trace.
-* **API Key Defaults:** The system intelligently uses `.get()` fallbacks to handle missing fields (like a missing `position` key for drivers who haven't scored points yet), avoiding silent crashes.
-* **Timezone Math:** The `next` and `schedule` modules automatically parse UTC dates from the API and convert them to live local offsets (e.g., `UTC+3`).
+Both implementations support the following data views:
+
+* **`standings`**: Current season Driver Championship standings.
+* **`constructors`**: Current season Constructor Championship standings.
+* **`schedule`**: Full race calendar for the current season with local time conversions.
+* **`next`**: Details for the next upcoming race, including a live countdown timer.
+* **`last`**: Race classification and final results for the last completed Grand Prix.
+* **`pilot <CODE>`**: Detailed historical statistics (wins, poles, starts) for a specific driver (e.g., VER, HAM, ALO).
+* **`drivers`**: A grid list of all active drivers in the current season.
 
 ---
 
-*Powered by the [Jolpi F1 API](https://jolpi.ca).*
+## 🏗️ Architecture
+
+* The **Python implementation** uses `threading` to keep a loading spinner active while data is fetched.
+* The **Node.js implementation** is bundled into a single file (`dist/index.js`) using ESBuild, making it fast and portable without babel-node at runtime.
+* The API backing this project is Jolpi. Because it is public and read-only, we bypass SSL verification in the Python HTTP requests to avoid certificate trust issues on some offline or corporate machines.
+
+---
+*Developed for Formula 1 fans who live in the terminal.*
