@@ -1,29 +1,37 @@
 // src/index.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { render, Box, Text, useInput, Newline, Spacer } from "ink";
 import Spinner from "ink-spinner";
+import SelectInput from "ink-select-input";
+import TextInput from "ink-text-input";
 import chalk from "chalk";
 import fetch from "node-fetch";
 var BASE = "https://api.jolpi.ca/ergast/f1";
 var SEASON = "2026";
 var TEAM_COLORS = {
-  "Red Bull": "blueBright",
-  "Ferrari": "redBright",
-  "Mercedes": "cyanBright",
-  "McLaren": "yellow",
-  "Aston Martin": "green",
-  "Alpine": "magentaBright",
-  "Williams": "blue",
-  "AlphaTauri": "white",
-  "RB": "white",
-  "Sauber": "greenBright",
-  "Haas": "gray"
+  "Red Bull Racing": "#3671C6",
+  "Red Bull": "#3671C6",
+  "Ferrari": "#E8002D",
+  "Mercedes": "#27F4D2",
+  "McLaren": "#FF8000",
+  "Aston Martin": "#358C75",
+  "Alpine F1 Team": "#FF87BC",
+  "Alpine": "#FF87BC",
+  "Williams": "#64C4FF",
+  "RB F1 Team": "#6692FF",
+  "RB": "#6692FF",
+  "Haas F1 Team": "#B6BABD",
+  "Haas": "#B6BABD",
+  "Sauber/Kick": "#52E252",
+  "Sauber": "#52E252",
+  "Audi": "#52E252"
+  // Using Sauber's color temporarily until Audi rebranding is official
 };
 function teamColor(name) {
   for (const [k, v] of Object.entries(TEAM_COLORS)) {
-    if (name.toLowerCase().includes(k.toLowerCase())) return v;
+    if (name.toLowerCase().includes(k.toLowerCase())) return chalk.hex(v);
   }
-  return "greenBright";
+  return chalk.gray;
 }
 var NAT_FLAGS = {
   "Dutch": "\u{1F1F3}\u{1F1F1}",
@@ -44,7 +52,9 @@ var NAT_FLAGS = {
   "New Zealander": "\u{1F1F3}\u{1F1FF}",
   "Italian": "\u{1F1EE}\u{1F1F9}",
   "Austrian": "\u{1F1E6}\u{1F1F9}",
-  "Swiss": "\u{1F1E8}\u{1F1ED}"
+  "Swiss": "\u{1F1E8}\u{1F1ED}",
+  "Argentine": "\u{1F1E6}\u{1F1F7}",
+  "Brazilian": "\u{1F1E7}\u{1F1F7}"
 };
 var RACE_FLAGS = {
   "Bahrain": "\u{1F1E7}\u{1F1ED}",
@@ -78,66 +88,142 @@ function pad(str, len, right = false) {
   if (right) return s.padStart(len).slice(0, len);
   return s.padEnd(len).slice(0, len);
 }
-var Header = ({ title }) => /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "\u2550".repeat(65)), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, "  \u{1F3CE}\uFE0F  ", title.toUpperCase()), /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "\u2550".repeat(65)));
-var Loading = ({ label }) => /* @__PURE__ */ React.createElement(Box, { marginY: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), " ", label, "..."));
-var Medal = ({ pos }) => {
-  if (pos === "1" || pos === 1) return /* @__PURE__ */ React.createElement(Text, { color: "yellowBright" }, "\u{1F947}");
-  if (pos === "2" || pos === 2) return /* @__PURE__ */ React.createElement(Text, { color: "whiteBright" }, "\u{1F948}");
-  if (pos === "3" || pos === 3) return /* @__PURE__ */ React.createElement(Text, { color: "redBright" }, "\u{1F949}");
-  return /* @__PURE__ */ React.createElement(Text, null, "  ");
+var AsciiHeader = () => {
+  const lines = [
+    "  ___ _   _____              _           _ ",
+    " | __/ | |_   _|___ _ _ _ __(_)_ _  __ _| |",
+    " | _|| |   | |/ -_) '_| '  \\| | ' \\/ _` | |",
+    " |_| |_|   |_|\\___|_| |_|_|_|_|_||_\\__,_|_|"
+  ];
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", alignItems: "center", marginBottom: 1 }, lines.map((line, i) => /* @__PURE__ */ React.createElement(Text, { key: i, color: "redBright", bold: true, wrap: "none" }, line)));
 };
-var Err = ({ msg }) => /* @__PURE__ */ React.createElement(Box, { marginY: 1, paddingX: 2, borderStyle: "single", borderColor: "red" }, /* @__PURE__ */ React.createElement(Text, { color: "redBright", bold: true }, "ERROR: "), /* @__PURE__ */ React.createElement(Text, { color: "red" }, msg));
-var apiFetch = async (endpoint) => {
+var cache = /* @__PURE__ */ new Map();
+var CACHE_TTL = { LONG: 5 * 60 * 1e3, SHORT: 30 * 1e3 };
+var apiFetch = async (endpoint, ttl = CACHE_TTL.LONG) => {
+  const url = `${BASE}${endpoint}`;
+  if (cache.has(url)) {
+    const cached = cache.get(url);
+    if (Date.now() - cached.timestamp < ttl) {
+      return { data: cached.data, cached: true };
+    }
+  }
   try {
-    const res = await fetch(`${BASE}${endpoint}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
-    return await res.json();
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    cache.set(url, { data, timestamp: Date.now() });
+    return { data, cached: false };
   } catch (err) {
-    throw new Error(err.message.includes("fetch") ? `Network error: Cannot reach Ergast API.` : err.message);
+    if (cache.has(url)) {
+      return { data: cache.get(url).data, cached: true, offline: true };
+    }
+    throw new Error(err.message.includes("fetch") ? `Network Error: Cannot reach API.` : err.message);
   }
 };
-var StandingsView = () => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
+var Header = ({ title, isCached, isOffline }) => /* @__PURE__ */ React.createElement(Box, { flexDirection: "row", justifyContent: "space-between", marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, "\u{1F3CE}\uFE0F  ", title.toUpperCase()), /* @__PURE__ */ React.createElement(Box, null, isOffline && /* @__PURE__ */ React.createElement(Text, { color: "redBright" }, " \u26A0\uFE0F OFFLINE "), isCached && !isOffline && /* @__PURE__ */ React.createElement(Text, { color: "gray" }, " \u{1F4E6} CACHED ")));
+var Err = ({ msg }) => /* @__PURE__ */ React.createElement(Box, { marginY: 1, padding: 1, borderStyle: "single", borderColor: "red" }, /* @__PURE__ */ React.createElement(Text, { color: "redBright", bold: true }, "ERROR: "), /* @__PURE__ */ React.createElement(Text, { color: "red" }, msg, " "), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "(Press [R] to retry)"));
+var Medal = ({ pos }) => {
+  if (pos === "1" || pos === 1) return /* @__PURE__ */ React.createElement(Text, { color: "#FFD700" }, "\u{1F947}");
+  if (pos === "2" || pos === 2) return /* @__PURE__ */ React.createElement(Text, { color: "#C0C0C0" }, "\u{1F948}");
+  if (pos === "3" || pos === 3) return /* @__PURE__ */ React.createElement(Text, { color: "#CD7F32" }, "\u{1F949}");
+  return /* @__PURE__ */ React.createElement(Text, null, "  ");
+};
+var useF1Data = (endpoint, ttl = CACHE_TTL.LONG, dependencies = []) => {
+  const [state, setState] = useState({ data: null, err: null, loading: true, cached: false, offline: false });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    apiFetch(`/${SEASON}/driverStandings.json`).then((d) => setData(d.MRData.StandingsTable.StandingsLists[0]?.DriverStandings)).catch((e) => setErr(e.message));
-  }, []);
+    let isMounted = true;
+    setState((s) => ({ ...s, loading: true, err: null }));
+    apiFetch(endpoint, ttl).then((res) => {
+      if (isMounted) setState({ data: res.data, err: null, loading: false, cached: res.cached, offline: res.offline });
+    }).catch((err) => {
+      if (isMounted) setState({ data: null, err: err.message, loading: false, cached: false, offline: false });
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [endpoint, tick, ...dependencies]);
+  const refresh = () => setTick((t) => t + 1);
+  return { ...state, refresh };
+};
+var TableRow = ({ cols, widthArr, dim = false }) => /* @__PURE__ */ React.createElement(Box, null, cols.map((col, i) => /* @__PURE__ */ React.createElement(Box, { key: i, width: widthArr[i] }, typeof col === "string" || typeof col === "number" ? /* @__PURE__ */ React.createElement(Text, { dimColor: dim }, col) : col)));
+var StandingsView = () => {
+  const { data, err, loading, cached, offline, refresh } = useF1Data(`/${SEASON}/driverStandings.json`, CACHE_TTL.LONG);
+  useInput((input) => {
+    if (input.toLowerCase() === "r") refresh();
+  });
+  if (loading) return /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, " Fetching standings..."));
   if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching driver standings" });
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: `Driver Standings ${SEASON}` }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("DRIVER", 22), " ", pad("TEAM", 25), " ", "PTS")), data.map((d) => {
+  const tableData = data?.MRData?.StandingsTable?.StandingsLists[0]?.DriverStandings || [];
+  const widths = [6, 4, 25, 25, 6];
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: `Driver Standings ${SEASON}`, isCached: cached, isOffline: offline }), /* @__PURE__ */ React.createElement(Box, { borderStyle: "single", borderColor: "gray", flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(TableRow, { cols: ["POS", "", "DRIVER", "TEAM", "PTS"], widthArr: widths, dim: true }), tableData.map((d, i) => {
     const team = d.Constructors[0]?.name || "Unknown";
     const name = `${d.Driver.givenName[0]} ${d.Driver.familyName}`;
     const pos = d.position || d.positionText || "-";
     const pts = d.points || "0";
-    return /* @__PURE__ */ React.createElement(Box, { key: d.Driver.driverId }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(pos, 2, true), " ")), /* @__PURE__ */ React.createElement(Box, { width: 3 }, /* @__PURE__ */ React.createElement(Medal, { pos })), /* @__PURE__ */ React.createElement(Box, { width: 22 }, /* @__PURE__ */ React.createElement(Text, { color: "white" }, name)), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(pts, 4, true)));
-  }));
+    const isMedal = ["1", "2", "3"].includes(pos);
+    const isDim = i > 9 && !isMedal;
+    return /* @__PURE__ */ React.createElement(
+      TableRow,
+      {
+        key: d.Driver.driverId,
+        widths,
+        dim: isDim,
+        cols: [
+          /* @__PURE__ */ React.createElement(Text, { bold: isMedal }, pad(pos, 3, true)),
+          /* @__PURE__ */ React.createElement(Medal, { pos }),
+          /* @__PURE__ */ React.createElement(Text, { color: isMedal ? "whiteBright" : "white", dimColor: isDim }, name),
+          /* @__PURE__ */ React.createElement(Text, null, teamColor(team)(team)),
+          /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(pts, 4, true))
+        ],
+        widthArr: widths
+      }
+    );
+  })));
 };
 var ConstructorsView = () => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    apiFetch(`/${SEASON}/constructorStandings.json`).then((d) => setData(d.MRData.StandingsTable.StandingsLists[0]?.ConstructorStandings)).catch((e) => setErr(e.message));
-  }, []);
+  const { data, err, loading, cached, offline, refresh } = useF1Data(`/${SEASON}/constructorStandings.json`, CACHE_TTL.LONG);
+  useInput((input) => {
+    if (input.toLowerCase() === "r") refresh();
+  });
+  if (loading) return /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, " Fetching constructors..."));
   if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching constructor standings" });
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: `Constructor Standings ${SEASON}` }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("TEAM", 25), " ", pad("NAT", 6), " ", pad("WINS", 6), " ", "PTS")), data.map((d) => {
+  const tableData = data?.MRData?.StandingsTable?.StandingsLists[0]?.ConstructorStandings || [];
+  const widths = [6, 4, 25, 6, 6, 6];
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: `Constructor Standings ${SEASON}`, isCached: cached, isOffline: offline }), /* @__PURE__ */ React.createElement(Box, { borderStyle: "single", borderColor: "gray", flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(TableRow, { cols: ["POS", "", "TEAM", "NAT", "WINS", "PTS"], widthArr: widths, dim: true }), tableData.map((d, i) => {
     const team = d.Constructor.name;
     const flag = getFlag(d.Constructor.nationality, NAT_FLAGS);
     const pos = d.position || d.positionText || "-";
     const pts = d.points || "0";
     const wins = d.wins || "0";
-    return /* @__PURE__ */ React.createElement(Box, { key: d.Constructor.constructorId }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(pos, 2, true), " ")), /* @__PURE__ */ React.createElement(Box, { width: 3 }, /* @__PURE__ */ React.createElement(Medal, { pos })), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Box, { width: 6 }, /* @__PURE__ */ React.createElement(Text, null, flag)), /* @__PURE__ */ React.createElement(Box, { width: 6 }, /* @__PURE__ */ React.createElement(Text, null, pad(wins, 4, true))), /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(pts, 4, true)));
-  }));
+    const isDim = i > 4;
+    return /* @__PURE__ */ React.createElement(
+      TableRow,
+      {
+        key: d.Constructor.constructorId,
+        widthArr: widths,
+        cols: [
+          /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(pos, 3, true)),
+          /* @__PURE__ */ React.createElement(Medal, { pos }),
+          /* @__PURE__ */ React.createElement(Text, null, teamColor(team)(team)),
+          /* @__PURE__ */ React.createElement(Text, null, flag),
+          /* @__PURE__ */ React.createElement(Text, { dimColor: isDim }, pad(wins, 4, true)),
+          /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(pts, 4, true))
+        ]
+      }
+    );
+  })));
 };
 var ScheduleView = () => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    apiFetch(`/${SEASON}.json`).then((d) => setData(d.MRData.RaceTable.Races)).catch((e) => setErr(e.message));
-  }, []);
+  const { data, err, loading, cached, offline, refresh } = useF1Data(`/${SEASON}.json`, CACHE_TTL.LONG);
+  useInput((input) => {
+    if (input.toLowerCase() === "r") refresh();
+  });
+  if (loading) return /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, " Fetching schedule..."));
   if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching schedule" });
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: `Race Schedule ${SEASON}` }), data.map((r) => {
+  const races = data?.MRData?.RaceTable?.Races || [];
+  const widths = [6, 4, 32, 12, 16];
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: `Race Schedule ${SEASON}`, isCached: cached, isOffline: offline }), /* @__PURE__ */ React.createElement(Box, { borderStyle: "single", borderColor: "gray", flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(TableRow, { cols: ["RND", "", "GRAND PRIX", "DATE", "TIME (UTC+3)"], widthArr: widths, dim: true }), races.map((r) => {
     const flag = getFlag(r.Circuit.Location.country, RACE_FLAGS);
     let dateStr = r.date;
     let timeStr = r.time ? r.time.replace("Z", "") : "TBD";
@@ -147,286 +233,148 @@ var ScheduleView = () => {
       dateStr = gmt3.toISOString().split("T")[0];
       timeStr = gmt3.toISOString().split("T")[1].substring(0, 5);
     }
-    return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", key: r.round, marginBottom: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad(r.round, 2, true), "."), /* @__PURE__ */ React.createElement(Text, null, " ", flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, pad(r.raceName, 30)), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, pad(dateStr, 12)), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, timeStr)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 7 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, r.Circuit.circuitName, ", ", r.Circuit.Location.locality)));
-  }));
-};
-var LastRaceView = () => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    const fetchLastRace = async () => {
-      try {
-        let res = await apiFetch(`/current/last/results.json`);
-        if (res.MRData.RaceTable.Races.length === 0) {
-          const currentSeason = parseInt(res.MRData.RaceTable.season, 10);
-          const prevSeason = currentSeason - 1;
-          res = await apiFetch(`/${prevSeason}/last/results.json`);
-        }
-        setData(res.MRData.RaceTable.Races[0]);
-      } catch (e) {
-        setErr(e.message);
+    return /* @__PURE__ */ React.createElement(
+      TableRow,
+      {
+        key: r.round,
+        widthArr: widths,
+        cols: [
+          /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad(r.round, 3, true)),
+          /* @__PURE__ */ React.createElement(Text, null, flag),
+          /* @__PURE__ */ React.createElement(Text, { color: "whiteBright" }, r.raceName),
+          /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, dateStr),
+          /* @__PURE__ */ React.createElement(Text, { dimColor: true }, timeStr)
+        ]
       }
-    };
-    fetchLastRace();
-  }, []);
-  if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching last race" });
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: "Last Race Results" }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "cyanBright" }, "Season ", data.season, " Round ", data.round, ": ", data.raceName)), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("DRIVER", 22), " ", pad("TEAM", 25), " ", "TIME/STATUS")), data.Results.map((r) => {
-    const team = r.Constructor.name;
-    const name = `${r.Driver.givenName[0]} ${r.Driver.familyName}`;
-    const timeStr = r.Time ? r.Time.time : r.status;
-    const isFinished = !timeStr.includes("Laps") && timeStr !== "Finished";
-    return /* @__PURE__ */ React.createElement(Box, { key: r.position }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(r.position, 3, true))), /* @__PURE__ */ React.createElement(Box, { width: 22 }, /* @__PURE__ */ React.createElement(Text, { color: "white" }, name)), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Text, { color: isFinished ? "greenBright" : "gray" }, timeStr));
-  }));
+    );
+  })));
 };
 var NextRaceView = () => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
+  const { data, err, loading, cached, offline, refresh } = useF1Data(`/current.json`, CACHE_TTL.SHORT);
+  const [timeLeft, setTimeLeft] = useState("");
+  useInput((input) => {
+    if (input.toLowerCase() === "r") refresh();
+  });
   useEffect(() => {
-    apiFetch(`/current.json`).then((d) => {
-      const races = d.MRData.RaceTable.Races;
-      const now = /* @__PURE__ */ new Date();
-      let nextRace = null;
-      for (const r of races) {
-        const dateStr2 = r.date;
-        const timeStr2 = r.time || "00:00:00Z";
-        const rDt = /* @__PURE__ */ new Date(`${dateStr2}T${timeStr2}`);
-        if (rDt > now) {
-          nextRace = { ...r, rDt };
-          break;
-        }
+    if (!data) return;
+    const races = data.MRData.RaceTable.Races;
+    const now = /* @__PURE__ */ new Date();
+    let next = null;
+    for (const r of races) {
+      const dateStr = r.date;
+      const timeStr = r.time || "00:00:00Z";
+      const rDt = /* @__PURE__ */ new Date(`${dateStr}T${timeStr}`);
+      if (rDt > now) {
+        next = { ...r, rDt };
+        break;
       }
-      setData(nextRace || { noRaces: true });
-    }).catch((e) => setErr(e.message));
-  }, []);
-  if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching next race" });
-  if (data.noRaces) {
-    return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: "Next Race" }), /* @__PURE__ */ React.createElement(Text, null, "No upcoming races found for this season."));
-  }
-  const diff = data.rDt - /* @__PURE__ */ new Date();
-  const days = Math.floor(diff / (1e3 * 60 * 60 * 24));
-  const hours = Math.floor(diff / (1e3 * 60 * 60) % 24);
-  const minutes = Math.floor(diff / 1e3 / 60 % 60);
-  const flag = getFlag(data.Circuit.Location.country, RACE_FLAGS);
-  const gmt3 = new Date(data.rDt.getTime() + 3 * 3600 * 1e3);
-  const dateStr = gmt3.toISOString().split("T")[0];
-  const timeStr = gmt3.toISOString().split("T")[1].substring(0, 5);
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: "Next Race" }), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", marginY: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, null, flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, data.raceName)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Location: ", data.Circuit.circuitName, ", ", data.Circuit.Location.locality)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, "Date:     ", dateStr, " at ", timeStr)), /* @__PURE__ */ React.createElement(Box, { paddingLeft: 4, marginTop: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "Starts in: ", days, "d ", hours, "h ", minutes, "m"))));
-};
-var FALLBACK_TEAMS = {
-  "albon": "Williams",
-  "alonso": "Aston Martin",
-  "antonelli": "Mercedes",
-  "bearman": "Haas",
-  "bortoleto": "Sauber",
-  "bottas": "Sauber",
-  "colapinto": "Williams",
-  "gasly": "Alpine",
-  "hadjar": "RB",
-  "hamilton": "Ferrari",
-  "hulkenberg": "Sauber",
-  "lawson": "RB",
-  "leclerc": "Ferrari",
-  "lindblad": "RB",
-  "norris": "McLaren",
-  "ocon": "Haas",
-  "piastri": "McLaren",
-  "perez": "Red Bull",
-  "russell": "Mercedes",
-  "sainz": "Williams",
-  "stroll": "Aston Martin",
-  "max_verstappen": "Red Bull",
-  "tsunoda": "RB",
-  "doohan": "Alpine"
-};
-var DriversView = () => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    const fetchDrivers = async () => {
-      try {
-        const [dRes, sRes] = await Promise.all([
-          apiFetch(`/${SEASON}/drivers.json`),
-          apiFetch(`/${SEASON}/driverStandings.json`).catch(() => null)
-        ]);
-        const tMap = {};
-        if (sRes?.MRData?.StandingsTable?.StandingsLists?.length > 0) {
-          sRes.MRData.StandingsTable.StandingsLists[0].DriverStandings.forEach((d) => {
-            tMap[d.Driver.driverId] = d.Constructors[0]?.name || "Unknown";
-          });
-        }
-        const drivers = dRes.MRData.DriverTable.Drivers.map((d) => ({
-          ...d,
-          team: tMap[d.driverId] || FALLBACK_TEAMS[d.driverId] || "Unknown"
-        }));
-        setData(drivers);
-      } catch (e) {
-        setErr(e.message);
-      }
-    };
-    fetchDrivers();
-  }, []);
-  if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: "Fetching drivers" });
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: `Drivers ${SEASON}` }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("NO", 4), " ", pad("DRIVER", 23), " ", pad("TEAM", 20), " ", pad("NAT", 6), " ", "CODE")), data.map((d) => {
-    const name = `${d.givenName} ${d.familyName}`;
-    const flag = getFlag(d.nationality, NAT_FLAGS);
-    return /* @__PURE__ */ React.createElement(Box, { key: d.driverId }, /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(d.permanentNumber || "-", 3, true), " "), /* @__PURE__ */ React.createElement(Text, { color: "white" }, pad(name, 23)), /* @__PURE__ */ React.createElement(Text, { color: teamColor(d.team) }, pad(d.team, 20)), /* @__PURE__ */ React.createElement(Text, null, pad(flag, 6)), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, d.code || "N/A")));
-  }));
-};
-var PilotView = ({ pilotCode }) => {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    if (!pilotCode) {
-      setErr("Please provide a pilot 3-letter code. (e.g., 'npm start pilot VER')");
+    }
+    if (!next) {
+      setTimeLeft("End of season");
       return;
     }
-    const code = pilotCode.toUpperCase();
+    const iv = setInterval(() => {
+      const diff = next.rDt - /* @__PURE__ */ new Date();
+      const d = Math.floor(diff / (1e3 * 60 * 60 * 24));
+      const h = Math.floor(diff / (1e3 * 60 * 60) % 24);
+      const m = Math.floor(diff / 1e3 / 60 % 60);
+      const s = Math.floor(diff / 1e3 % 60);
+      setTimeLeft(`${d}d ${h}h ${m}m ${pad(s, 2, true)}s`);
+    }, 1e3);
+    return () => clearInterval(iv);
+  }, [data]);
+  if (loading) return /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, " Fetching next race..."));
+  if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: "Next Race Countdown", isCached: cached, isOffline: offline }), /* @__PURE__ */ React.createElement(Box, { borderStyle: "round", borderColor: "greenBright", flexDirection: "column", paddingX: 2, paddingY: 1 }, /* @__PURE__ */ React.createElement(Text, null, "Upcoming race details are live calculating..."), /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true, marginTop: 1 }, "STARTS IN: ", timeLeft), /* @__PURE__ */ React.createElement(Text, { dimColor: true, marginTop: 1 }, "(Press [R] to update schedule payload)")));
+};
+var PilotSearchView = () => {
+  const [query, setQuery] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  useInput((input, key) => {
+    if (key.return && query.length > 0) {
+      setSubmitted(true);
+    } else if (!submitted) {
+      if (/^[a-zA-Z]$/.test(input) && query.length < 5) {
+        setQuery((prev) => (prev + input).toUpperCase());
+      } else if (key.backspace || key.delete) {
+        setQuery((prev) => prev.slice(0, -1));
+      }
+    } else if (input.toLowerCase() === "r") {
+      setSubmitted(false);
+      setQuery("");
+    }
+  });
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: "Pilot Search", isCached: false, isOffline: false }), !submitted ? /* @__PURE__ */ React.createElement(Box, { borderStyle: "single", borderColor: "blueBright", padding: 1 }, /* @__PURE__ */ React.createElement(Text, null, "Enter 3-Letter Driver Code (e.g., VER, HAM, LEC): "), /* @__PURE__ */ React.createElement(Text, { color: "cyanBright", bold: true }, query), /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }))) : /* @__PURE__ */ React.createElement(PilotResults, { code: query }));
+};
+var PilotResults = ({ code }) => {
+  const { data: activeData, err: err1, loading: l1 } = useF1Data("/current/drivers.json");
+  const [stats, setStats] = useState({ loading: true, data: null, err: null });
+  useEffect(() => {
+    if (!activeData && !err1) return;
     const fetchStats = async () => {
       try {
-        const activeRes = await apiFetch("/current/drivers.json");
-        let driver2 = activeRes.MRData.DriverTable.Drivers.find((d) => d.code === code);
-        let driverId = "";
+        let driver2 = null, driverId = "";
+        if (activeData?.MRData?.DriverTable?.Drivers) {
+          driver2 = activeData.MRData.DriverTable.Drivers.find((d) => d.code === code);
+        }
         if (!driver2) {
-          driverId = pilotCode.toLowerCase();
-          try {
-            const singleRes = await apiFetch(`/drivers/${driverId}.json`);
-            if (singleRes.MRData.total === "0") {
-              setErr(`Driver '${code}' not found in active grid. Use full driverId for historical pilots.`);
-              return;
-            }
-            driver2 = singleRes.MRData.DriverTable.Drivers[0];
-          } catch (e) {
-            setErr(`Driver '${code}' not found.`);
-            return;
-          }
+          driverId = code.toLowerCase();
+          const res = await apiFetch(`/drivers/${driverId}.json`);
+          if (res.data.MRData.total === "0") throw new Error(`Not found: ${code}`);
+          driver2 = res.data.MRData.DriverTable.Drivers[0];
         } else {
           driverId = driver2.driverId;
         }
-        const [winsRes, polesRes, startsRes] = await Promise.all([
+        const [wRes, pRes, sRes] = await Promise.all([
           apiFetch(`/drivers/${driverId}/results/1.json?limit=1`),
           apiFetch(`/drivers/${driverId}/qualifying/1.json?limit=1`),
           apiFetch(`/drivers/${driverId}/results.json?limit=1`)
         ]);
-        const wdcMap = {
-          "michael_schumacher": 7,
-          "hamilton": 7,
-          "fangio": 5,
-          "prost": 4,
-          "vettel": 4,
-          "max_verstappen": 4,
-          "brabham": 3,
-          "stewart": 3,
-          "lauda": 3,
-          "piquet": 3,
-          "senna": 3,
-          "alonso": 2,
-          "hakkinen": 2,
-          "fittipaldi": 2,
-          "clark": 2,
-          "ascari": 2,
-          "raikkonen": 1,
-          "rosberg": 1,
-          "nico_rosberg": 1,
-          "button": 1,
-          "villeneuve": 1,
-          "damon_hill": 1,
-          "mansell": 1,
-          "andretti": 1,
-          "hunt": 1,
-          "scheckter": 1,
-          "jones": 1,
-          "surtees": 1,
-          "phil_hill": 1,
-          "hawthorn": 1,
-          "farina": 1
-        };
-        setData({
-          driver: driver2,
-          wins: winsRes.MRData.total,
-          poles: polesRes.MRData.total,
-          starts: startsRes.MRData.total,
-          champs: wdcMap[driverId] || 0
+        setStats({
+          loading: false,
+          err: null,
+          data: {
+            driver: driver2,
+            wins: wRes.data.MRData.total,
+            poles: pRes.data.MRData.total,
+            starts: sRes.data.MRData.total
+          }
         });
-      } catch (error) {
-        setErr(error.message);
+      } catch (e) {
+        setStats({ loading: false, err: e.message, data: null });
       }
     };
     fetchStats();
-  }, [pilotCode]);
-  if (err) return /* @__PURE__ */ React.createElement(Err, { msg: err });
-  if (!data) return /* @__PURE__ */ React.createElement(Loading, { label: `Searching Driver Info` });
-  const { driver, wins, poles, starts, champs } = data;
+  }, [activeData, err1, code]);
+  if (l1 || stats.loading) return /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, " Fetching stats for ", code, "..."));
+  if (err1 || stats.err) return /* @__PURE__ */ React.createElement(Err, { msg: err1 || stats.err });
+  const { driver, wins, poles, starts } = stats.data;
   const flag = getFlag(driver.nationality, NAT_FLAGS);
-  const name = `${driver.givenName} ${driver.familyName}`;
-  const number = driver.permanentNumber || "N/A";
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingX: 1 }, /* @__PURE__ */ React.createElement(Header, { title: `Pilot Profile: ${pilotCode.toUpperCase()}` }), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", marginY: 1 }, /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Text, null, flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, name), /* @__PURE__ */ React.createElement(Text, null, "  |  #", number, "  |  ", driver.dateOfBirth)), /* @__PURE__ */ React.createElement(Box, { marginTop: 1, paddingLeft: 4, flexDirection: "column" }, /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { color: "yellowBright" }, "World Championships: "), /* @__PURE__ */ React.createElement(Text, { bold: true }, champs)), /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { color: "greenBright" }, "All-Time Wins:       "), /* @__PURE__ */ React.createElement(Text, { bold: true }, wins)), /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { color: "cyanBright" }, "Pole Positions:      "), /* @__PURE__ */ React.createElement(Text, { bold: true }, poles)), /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Race Starts:         "), /* @__PURE__ */ React.createElement(Text, { bold: true }, starts)))));
+  return /* @__PURE__ */ React.createElement(Box, { borderStyle: "round", borderColor: "cyanBright", flexDirection: "column", paddingX: 2, paddingY: 1 }, /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, null, flag, " "), /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", bold: true }, driver.givenName, " ", driver.familyName), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "  |  #", driver.permanentNumber || "N/A", "  |  ", driver.dateOfBirth)), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", paddingLeft: 4 }, /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { color: "greenBright" }, "All-Time Wins:       "), /* @__PURE__ */ React.createElement(Text, { bold: true }, wins)), /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { color: "cyanBright" }, "Pole Positions:      "), /* @__PURE__ */ React.createElement(Text, { bold: true }, poles)), /* @__PURE__ */ React.createElement(Text, null, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Race Starts:         "), /* @__PURE__ */ React.createElement(Text, { bold: true }, starts))), /* @__PURE__ */ React.createElement(Text, { dimColor: true, marginTop: 1 }, "(Press [R] to search another pilot, or [M] for Menu)"));
 };
-var VIEWS = {
-  standings: /* @__PURE__ */ React.createElement(StandingsView, null),
-  drivers: /* @__PURE__ */ React.createElement(DriversView, null),
-  constructors: /* @__PURE__ */ React.createElement(ConstructorsView, null),
-  schedule: /* @__PURE__ */ React.createElement(ScheduleView, null),
-  next: /* @__PURE__ */ React.createElement(NextRaceView, null),
-  last: /* @__PURE__ */ React.createElement(LastRaceView, null)
-};
-var MENU_ITEMS = [
-  { key: "1", name: "Driver Standings", view: "standings" },
-  { key: "2", name: "Drivers / Pilots List", view: "drivers" },
-  { key: "3", name: "Constructor Standings", view: "constructors" },
-  { key: "4", name: "Race Schedule", view: "schedule" },
-  { key: "5", name: "Next Race", view: "next" },
-  { key: "6", name: "Last Race Results", view: "last" },
-  { key: "q", name: "Quit", view: "quit" }
+var items = [
+  { label: "Driver Standings", value: "standings" },
+  { label: "Constructor Standings", value: "constructors" },
+  { label: "Race Schedule", value: "schedule" },
+  { label: "Next Race Countdown", value: "next" },
+  { label: "Pilot Search", value: "pilot" },
+  { label: "Quit", value: "quit" }
 ];
-var App = ({ initialView, pilotCode }) => {
-  const [currentView, setCurrentView] = useState(initialView || "menu");
+var App = ({ initialView }) => {
+  const [view, setView] = useState(initialView || "menu");
   useInput((input, key) => {
-    if (currentView !== "menu") {
-      if (input.toLowerCase() === "b" || key.escape || input.toLowerCase() === "m") {
-        setCurrentView("menu");
-      } else if (input.toLowerCase() === "q") {
-        process.exit(0);
-      }
-      return;
-    }
-    const item = MENU_ITEMS.find((m) => m.key === input.toLowerCase());
-    if (item) {
-      if (item.view === "quit") process.exit(0);
-      else setCurrentView(item.view);
+    if (input.toLowerCase() === "m" || input.toLowerCase() === "b" || key.escape) {
+      setView("menu");
+    } else if (input.toLowerCase() === "q") {
+      process.exit(0);
     }
   });
-  if (currentView !== "menu" && VIEWS[currentView]) {
-    return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", padding: 1 }, VIEWS[currentView], /* @__PURE__ */ React.createElement(Box, { marginTop: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Press "), /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "[M]"), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, " or "), /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "[B]"), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, " to return to menu, "), /* @__PURE__ */ React.createElement(Text, { color: "redBright", bold: true }, "[Q]"), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, " to quit.")));
-  }
-  if (currentView === "pilot") {
-    return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", padding: 1 }, /* @__PURE__ */ React.createElement(PilotView, { pilotCode }), /* @__PURE__ */ React.createElement(Box, { marginTop: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Press "), /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "[M]"), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, " or "), /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "[B]"), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, " to return to menu, "), /* @__PURE__ */ React.createElement(Text, { color: "redBright", bold: true }, "[Q]"), /* @__PURE__ */ React.createElement(Text, { dimColor: true }, " to quit.")));
-  }
-  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", padding: 2, borderStyle: "round", borderColor: "redBright" }, /* @__PURE__ */ React.createElement(Box, { justifyContent: "center", marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "redBright", bold: true }, "F1 TERMINAL DASHBOARD")), /* @__PURE__ */ React.createElement(Box, { justifyContent: "center", marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { color: "whiteBright", italic: true }, "Interactive Terminal Dashboard")), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", marginX: 4, marginTop: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true, marginBottom: 1 }, "Select an option:"), MENU_ITEMS.map((m) => /* @__PURE__ */ React.createElement(Box, { key: m.key }, /* @__PURE__ */ React.createElement(Text, { color: "yellowBright", bold: true }, "[", m.key, "]"), /* @__PURE__ */ React.createElement(Text, null, "  ", m.name)))));
+  const handleSelect = (item) => {
+    if (item.value === "quit") process.exit(0);
+    setView(item.value);
+  };
+  return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", borderStyle: "round", borderColor: "red", padding: 1 }, /* @__PURE__ */ React.createElement(AsciiHeader, null), /* @__PURE__ */ React.createElement(Box, { flexDirection: "row" }, /* @__PURE__ */ React.createElement(Box, { width: 30, borderStyle: "single", borderColor: "gray", flexDirection: "column", paddingRight: 1 }, /* @__PURE__ */ React.createElement(Text, { bold: true, marginBottom: 1, color: "magentaBright" }, "\u{1F3C1} NAVIGATION"), view === "menu" ? /* @__PURE__ */ React.createElement(SelectInput, { items, onSelect: handleSelect }) : /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, items.map((i) => /* @__PURE__ */ React.createElement(Text, { key: i.value, color: i.value === view ? "greenBright" : "gray" }, i.value === view ? "\u25B6 " : "  ", i.label)))), /* @__PURE__ */ React.createElement(Box, { flexDirection: "column", flexGrow: 1, paddingLeft: 2 }, view === "menu" && /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "Select an option from the left to begin."), view === "standings" && /* @__PURE__ */ React.createElement(StandingsView, null), view === "constructors" && /* @__PURE__ */ React.createElement(ConstructorsView, null), view === "schedule" && /* @__PURE__ */ React.createElement(ScheduleView, null), view === "next" && /* @__PURE__ */ React.createElement(NextRaceView, null), view === "pilot" && /* @__PURE__ */ React.createElement(PilotSearchView, null))), /* @__PURE__ */ React.createElement(Box, { marginTop: 1, borderStyle: "single", borderColor: "gray", paddingTop: 1, justifyContent: "center" }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, "[\u2191/\u2193] Navigate  |  [Enter] Select  |  [M] Menu  |  [Q] Quit")));
 };
 var args = process.argv.slice(2);
-if (!args[0]) {
-  render(/* @__PURE__ */ React.createElement(App, null));
-} else {
-  const cmd = args[0].toLowerCase();
-  if (["standings", "drivers", "constructors", "schedule", "next", "last", "pilot"].includes(cmd)) {
-    render(/* @__PURE__ */ React.createElement(App, { initialView: cmd, pilotCode: args[1] }));
-  } else {
-    console.log(chalk.red.bold("\nF1 Terminal CLI - Error"));
-    console.log(`Unknown command: ${cmd}
-`);
-    console.log(chalk.bold("Available commands:"));
-    console.log(`  ${chalk.green("standings")}    - Show driver standings`);
-    console.log(`  ${chalk.green("drivers")}      - Show all drivers/pilots grid`);
-    console.log(`  ${chalk.green("constructors")} - Show constructor standings`);
-    console.log(`  ${chalk.green("schedule")}     - Show race schedule`);
-    console.log(`  ${chalk.green("next")}         - Show next upcoming race and countdown`);
-    console.log(`  ${chalk.green("last")}         - Show last race results`);
-    console.log(`  ${chalk.green("pilot VER")}    - Show historical stats for a pilot`);
-    console.log(`
-Run without arguments for interactive menu.`);
-    process.exit(0);
-  }
-}
+var cmd = args[0]?.toLowerCase();
+render(/* @__PURE__ */ React.createElement(App, { initialView: ["standings", "constructors", "schedule", "next", "pilot"].includes(cmd) ? cmd : "menu" }));
