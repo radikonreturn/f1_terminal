@@ -107,7 +107,9 @@ var StandingsView = () => {
   return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: `Driver Standings ${SEASON}` }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("DRIVER", 22), " ", pad("TEAM", 25), " ", "PTS")), data.map((d) => {
     const team = d.Constructors[0]?.name || "Unknown";
     const name = `${d.Driver.givenName[0]} ${d.Driver.familyName}`;
-    return /* @__PURE__ */ React.createElement(Box, { key: d.Driver.driverId }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(d.position, 2, true), " ")), /* @__PURE__ */ React.createElement(Box, { width: 3 }, /* @__PURE__ */ React.createElement(Medal, { pos: d.position })), /* @__PURE__ */ React.createElement(Box, { width: 22 }, /* @__PURE__ */ React.createElement(Text, { color: "white" }, name)), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(d.points, 4, true)));
+    const pos = d.position || d.positionText || "-";
+    const pts = d.points || "0";
+    return /* @__PURE__ */ React.createElement(Box, { key: d.Driver.driverId }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(pos, 2, true), " ")), /* @__PURE__ */ React.createElement(Box, { width: 3 }, /* @__PURE__ */ React.createElement(Medal, { pos })), /* @__PURE__ */ React.createElement(Box, { width: 22 }, /* @__PURE__ */ React.createElement(Text, { color: "white" }, name)), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(pts, 4, true)));
   }));
 };
 var ConstructorsView = () => {
@@ -121,7 +123,10 @@ var ConstructorsView = () => {
   return /* @__PURE__ */ React.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React.createElement(Header, { title: `Constructor Standings ${SEASON}` }), /* @__PURE__ */ React.createElement(Box, { marginBottom: 1 }, /* @__PURE__ */ React.createElement(Text, { dimColor: true }, pad("POS", 4), " ", pad("TEAM", 25), " ", pad("NAT", 6), " ", pad("WINS", 6), " ", "PTS")), data.map((d) => {
     const team = d.Constructor.name;
     const flag = getFlag(d.Constructor.nationality, NAT_FLAGS);
-    return /* @__PURE__ */ React.createElement(Box, { key: d.Constructor.constructorId }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(d.position, 2, true), " ")), /* @__PURE__ */ React.createElement(Box, { width: 3 }, /* @__PURE__ */ React.createElement(Medal, { pos: d.position })), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Box, { width: 6 }, /* @__PURE__ */ React.createElement(Text, null, flag)), /* @__PURE__ */ React.createElement(Box, { width: 6 }, /* @__PURE__ */ React.createElement(Text, null, pad(d.wins, 4, true))), /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(d.points, 4, true)));
+    const pos = d.position || d.positionText || "-";
+    const pts = d.points || "0";
+    const wins = d.wins || "0";
+    return /* @__PURE__ */ React.createElement(Box, { key: d.Constructor.constructorId }, /* @__PURE__ */ React.createElement(Box, { width: 4 }, /* @__PURE__ */ React.createElement(Text, { bold: true }, pad(pos, 2, true), " ")), /* @__PURE__ */ React.createElement(Box, { width: 3 }, /* @__PURE__ */ React.createElement(Medal, { pos })), /* @__PURE__ */ React.createElement(Box, { width: 25 }, /* @__PURE__ */ React.createElement(Text, { color: teamColor(team) }, team)), /* @__PURE__ */ React.createElement(Box, { width: 6 }, /* @__PURE__ */ React.createElement(Text, null, flag)), /* @__PURE__ */ React.createElement(Box, { width: 6 }, /* @__PURE__ */ React.createElement(Text, null, pad(wins, 4, true))), /* @__PURE__ */ React.createElement(Text, { color: "greenBright", bold: true }, pad(pts, 4, true)));
   }));
 };
 var ScheduleView = () => {
