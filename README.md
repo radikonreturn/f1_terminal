@@ -67,16 +67,11 @@ npm run run
 ```
 
 ### 🐳 Docker
-If you prefer running isolated containers instead of local Node environments, we've included a streamlined `docker-compose` setup.
+If you prefer running isolated containers instead of local Node environments, we've included a streamlined `docker compose` setup.
 
-Interactive shells require capturing TTY input (`-it`), so simply run:
+Simply run the interactive shell (this captures TTY input):
 ```bash
-docker-compose run --rm f1-terminal
-```
-Or build and run the image yourself manually:
-```bash
-docker build -t f1-terminal .
-docker run -it f1-terminal
+docker compose run --rm f1-terminal
 ```
 
 ---
