@@ -314,8 +314,8 @@ const NextRaceView = () => {
 
     useEffect(() => {
         if (!data) return;
-        const races = data.MRData.RaceTable.Races;
-        const now = new Date();
+    const races = data?.MRData?.RaceTable?.Races || [];
+    const now = new Date();
         let next = null;
         for (const r of races) {
             const dateStr = r.date;
@@ -402,6 +402,7 @@ const PilotResults = ({ code }) => {
 
     useEffect(() => {
         if (!activeData && !err1) return;
+        let isMounted = true;
 
         const fetchStats = async () => {
             try {
@@ -414,6 +415,7 @@ const PilotResults = ({ code }) => {
                 if (!driver) {
                     driverId = code.toLowerCase();
                     const res = await apiFetch(`/drivers/${driverId}.json`);
+                    if (!isMounted) return;
                     if (res.data.MRData.total === "0") throw new Error(`Not found: ${code}`);
                     driver = res.data.MRData.DriverTable.Drivers[0];
                 } else {
@@ -426,6 +428,8 @@ const PilotResults = ({ code }) => {
                     apiFetch(`/drivers/${driverId}/qualifying/1.json?limit=1`),
                     apiFetch(`/drivers/${driverId}/results.json?limit=1`)
                 ]);
+
+                if (!isMounted) return;
 
                 setStats({
                     loading: false,
@@ -443,6 +447,8 @@ const PilotResults = ({ code }) => {
         }
 
         fetchStats();
+        
+        return () => { isMounted = false; };
     }, [activeData, err1, code]);
 
     if (l1 || stats.loading) return <Box><Spinner type="dots" /><Text color="cyan"> Fetching stats for {code}...</Text></Box>;

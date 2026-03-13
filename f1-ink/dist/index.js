@@ -259,7 +259,7 @@ var NextRaceView = () => {
   });
   useEffect(() => {
     if (!data) return;
-    const races = data.MRData.RaceTable.Races;
+    const races = data?.MRData?.RaceTable?.Races || [];
     const now = /* @__PURE__ */ new Date();
     let next = null;
     for (const r of races) {
@@ -313,6 +313,7 @@ var PilotResults = ({ code }) => {
   const [stats, setStats] = useState({ loading: true, data: null, err: null });
   useEffect(() => {
     if (!activeData && !err1) return;
+    let isMounted = true;
     const fetchStats = async () => {
       try {
         let driver2 = null, driverId = "";
@@ -322,6 +323,7 @@ var PilotResults = ({ code }) => {
         if (!driver2) {
           driverId = code.toLowerCase();
           const res = await apiFetch(`/drivers/${driverId}.json`);
+          if (!isMounted) return;
           if (res.data.MRData.total === "0") throw new Error(`Not found: ${code}`);
           driver2 = res.data.MRData.DriverTable.Drivers[0];
         } else {
@@ -332,6 +334,7 @@ var PilotResults = ({ code }) => {
           apiFetch(`/drivers/${driverId}/qualifying/1.json?limit=1`),
           apiFetch(`/drivers/${driverId}/results.json?limit=1`)
         ]);
+        if (!isMounted) return;
         setStats({
           loading: false,
           err: null,
@@ -347,6 +350,9 @@ var PilotResults = ({ code }) => {
       }
     };
     fetchStats();
+    return () => {
+      isMounted = false;
+    };
   }, [activeData, err1, code]);
   if (l1 || stats.loading) return /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement(Spinner, { type: "dots" }), /* @__PURE__ */ React.createElement(Text, { color: "cyan" }, " Fetching stats for ", code, "..."));
   if (err1 || stats.err) return /* @__PURE__ */ React.createElement(Err, { msg: err1 || stats.err });
